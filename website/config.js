@@ -2,8 +2,8 @@
 // Paste the two values from Supabase → Project Settings → API.
 // (The anon/publishable key is designed to be public; the database rules protect the data.)
 window.OB_CONFIG = {
-  SUPABASE_URL: 'https://YOUR-PROJECT.supabase.co',
-  SUPABASE_ANON_KEY: 'YOUR-ANON-KEY',
+  SUPABASE_URL: 'https://legdxecjhdlmrnqdcybq.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_WLn75pmhIrz4RfA4KEb0GA_PXlyhxTO',
   EMAIL_DOMAIN: 'orbitlabs.global',
 
   // Deck structure (slide numbers start at 0). Used by the dashboard.
