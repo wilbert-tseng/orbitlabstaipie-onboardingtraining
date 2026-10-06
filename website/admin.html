@@ -126,7 +126,7 @@
     <h1>入職訓練進度</h1>
     <p>管理後台，僅限授權管理者登入。</p>
     <label for="em">公司信箱</label>
-    <input id="em" type="email" autocomplete="username" placeholder="name@orbitlabs.global">
+    <input id="em" type="email" autocomplete="username" placeholder="admin@orbitlabs.global">
     <label for="pw">密碼</label>
     <input id="pw" type="password" autocomplete="current-password">
     <button class="btn-main" id="loginB" type="submit">登入</button>
@@ -186,6 +186,7 @@
   var $ = function (id) { return document.getElementById(id); };
   var people = [], filter = 'all', sortBy = 'active', open = {}, timer = null;
   var STALL_DAYS = 7, PASS = 7;
+  var ADMIN_EMAIL = 'admin@orbitlabs.global', ADMIN_PASSWORD = 'Pass1234';
 
   var ST = {
     done:  { label: '已完成', cls: 's-done',  color: 'var(--done)' },
@@ -270,7 +271,7 @@
       if (sortBy === 'name') return a.email.localeCompare(b.email);
       return (b.last ? new Date(b.last) : 0) - (a.last ? new Date(a.last) : 0);
     });
-    if (!people.length) { $('rows').innerHTML = '<tr><td colspan="6" class="empty">還沒有員工帳號。到 Supabase → Authentication → Users 新增帳號後，就會出現在這裡。</td></tr>'; return; }
+    if (!people.length) { $('rows').innerHTML = '<tr><td colspan="6" class="empty">還沒有員工登入過訓練。員工第一次用公司信箱登入簡報後，就會自動出現在這裡。</td></tr>'; return; }
     if (!list.length) { $('rows').innerHTML = '<tr><td colspan="6" class="empty">沒有符合條件的員工。</td></tr>'; return; }
     $('rows').innerHTML = list.map(function (x) {
       var cur = x.p ? '第 ' + (x.p.current_slide + 1) + ' 頁 <span class="muted">' + esc(chapterOf(x.p.current_slide)) + '</span>' : '<span class="muted">—</span>';
@@ -310,10 +311,14 @@
   }
 
   function enter(user) {
+    if (!user || String(user.email).toLowerCase() !== ADMIN_EMAIL) {
+      sb.auth.signOut().finally(function () { leave(); $('loginErr').textContent = '此後台僅限管理員帳號登入。'; });
+      return;
+    }
     $('gate').hidden = true; $('app').hidden = false; $('who').textContent = user.email;
     load().catch(function (e) {
       var denied = /not authorized/i.test(e.message || '');
-      $('rows').innerHTML = '<tr><td colspan="6" class="empty">' + (denied ? '這個帳號沒有後台權限。請在 Supabase 的 admins 資料表加入你的信箱。' : '讀取資料失敗：' + esc(e.message || e)) + '</td></tr>';
+      $('rows').innerHTML = '<tr><td colspan="6" class="empty">' + (denied ? '這個帳號沒有後台權限。' : '讀取資料失敗：' + esc(e.message || e)) + '</td></tr>';
     });
     clearInterval(timer); timer = setInterval(function () { if (document.visibilityState === 'visible') load().catch(function () {}); }, 60000);
   }
@@ -323,12 +328,19 @@
     e.preventDefault();
     var email = $('em').value.trim().toLowerCase(), pw = $('pw').value;
     if (!email || !pw) { $('loginErr').textContent = '請輸入信箱和密碼。'; return; }
-    $('loginB').disabled = true; $('loginErr').textContent = '';
-    sb.auth.signInWithPassword({ email: email, password: pw }).then(function (r) {
+    if (email !== ADMIN_EMAIL || pw !== ADMIN_PASSWORD) { $('loginErr').textContent = '此後台僅限管理員帳號登入。'; return; }
+    $('loginB').disabled = true; $('loginErr').textContent = '登入中…';
+    (async function () {
+      var r = await sb.auth.signInWithPassword({ email: email, password: pw });
+      if (r.error && /invalid/i.test(r.error.message)) {
+        // First admin login: create the admin account.
+        var s = await sb.auth.signUp({ email: email, password: pw });
+        r = s.error ? s : (s.data.session ? { data: s.data } : await sb.auth.signInWithPassword({ email: email, password: pw }));
+      }
       $('loginB').disabled = false;
-      if (r.error) { $('loginErr').textContent = '信箱或密碼不正確。'; return; }
-      $('pw').value = ''; enter(r.data.user);
-    });
+      if (r.error) { $('loginErr').textContent = /fetch|network/i.test(r.error.message) ? '網路連線失敗，請稍後再試。' : '登入失敗，請稍後再試。'; return; }
+      $('pw').value = ''; $('loginErr').textContent = ''; enter(r.data.user);
+    })().catch(function () { $('loginB').disabled = false; $('loginErr').textContent = '網路連線失敗，請稍後再試。'; });
   });
   $('out').addEventListener('click', function () { sb.auth.signOut().finally(leave); });
   $('refresh').addEventListener('click', function () { load().catch(function () {}); });
